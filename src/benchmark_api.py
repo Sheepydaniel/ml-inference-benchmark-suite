@@ -1,17 +1,20 @@
 from pathlib import Path
 from time import perf_counter
-import requests
+
 import numpy as np
 import pandas as pd
+import requests
 
-ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = ROOT / "results"
-RESULTS_DIR.mkdir(exist_ok=True)
+BASE_DIR = Path(__file__).resolve().parent.parent
+OUT_DIR = BASE_DIR / "results"
+OUT_DIR.mkdir(exist_ok=True)
 
-API_URL = "http://127.0.0.1:8000/predict"
+URL = "http://127.0.0.1:8000/predict_batch"
 
-def generate_payload(seed: int):
+
+def make_reading(seed: int) -> dict:
     rng = np.random.default_rng(seed)
+
     return {
         "soil_moisture": float(rng.uniform(5, 90)),
         "temperature": float(rng.uniform(10, 42)),
@@ -21,44 +24,58 @@ def generate_payload(seed: int):
         "ndvi": float(rng.uniform(0.15, 0.95)),
     }
 
-def main(n_requests: int = 500):
-    latencies = []
-    successful_requests = 0
 
-    total_start = perf_counter()
-
-    for i in range(n_requests):
-        payload = generate_payload(i)
-
-        start = perf_counter()
-        response = requests.post(API_URL, json=payload, timeout=10)
-        end = perf_counter()
-
-        response.raise_for_status()
-
-        latencies.append((end - start) * 1000)
-        successful_requests += 1
-
-    total_end = perf_counter()
-    total_time_s = total_end - total_start
-
-    result = {
-        "mode": "fastapi_single",
-        "batch_size": 1,
-        "n_predictions": successful_requests,
-        "mean_latency_ms": float(np.mean(latencies)),
-        "p50_latency_ms": float(np.percentile(latencies, 50)),
-        "p95_latency_ms": float(np.percentile(latencies, 95)),
-        "p99_latency_ms": float(np.percentile(latencies, 99)),
-        "throughput_predictions_per_second": float(successful_requests / total_time_s),
+def percentiles(times):
+    return {
+        "mean_latency_ms": float(np.mean(times)),
+        "p50_latency_ms": float(np.percentile(times, 50)),
+        "p95_latency_ms": float(np.percentile(times, 95)),
+        "p99_latency_ms": float(np.percentile(times, 99)),
     }
 
-    df = pd.DataFrame([result])
-    output_path = RESULTS_DIR / "api_benchmark_results.csv"
-    df.to_csv(output_path, index=False)
+
+def test_batch_size(size: int, runs: int = 10) -> dict:
+    times = []
+    total_time = 0.0
+
+    for run in range(runs):
+        items = [make_reading(size * 1000 + run * 100 + i) for i in range(size)]
+
+        start = perf_counter()
+        r = requests.post(URL, json={"items": items}, timeout=30)
+        elapsed = perf_counter() - start
+
+        r.raise_for_status()
+
+        times.append(elapsed * 1000)
+        total_time += elapsed
+
+    row = {
+        "mode": "fastapi_batch",
+        "batch_size": size,
+        "runs": runs,
+        "n_predictions": size * runs,
+        "throughput_predictions_per_second": float((size * runs) / total_time),
+    }
+
+    row.update(percentiles(times))
+    return row
+
+
+def main():
+    rows = []
+
+    for size in [1, 8, 32, 128, 512]:
+        print(f"batch size {size}")
+        rows.append(test_batch_size(size))
+
+    df = pd.DataFrame(rows)
+    out_file = OUT_DIR / "batch_api_benchmark_results.csv"
+    df.to_csv(out_file, index=False)
 
     print(df)
-    print(f"\nSaved API benchmark results to: {output_path}")
+    print(f"\nsaved {out_file}")
+
 
 if __name__ == "__main__":
     main()
