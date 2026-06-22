@@ -1,1 +1,9 @@
-
+fastapi
+uvicorn
+pydantic
+scikit-learn
+pandas
+numpy
+matplotlib
+joblib
+requests
