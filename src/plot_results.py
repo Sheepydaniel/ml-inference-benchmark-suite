@@ -1,61 +1,129 @@
 from pathlib import Path
-import pandas as pd
+
 import matplotlib.pyplot as plt
+import pandas as pd
 
-ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = ROOT / "results"
-FIGURES_DIR = ROOT / "figures"
-FIGURES_DIR.mkdir(exist_ok=True)
+BASE_DIR = Path(__file__).resolve().parent.parent
+RESULTS = BASE_DIR / "results"
+FIGURES = BASE_DIR / "figures"
+FIGURES.mkdir(exist_ok=True)
 
-def load_results():
-    frames = []
 
-    local_path = RESULTS_DIR / "local_benchmark_results.csv"
-    api_path = RESULTS_DIR / "api_benchmark_results.csv"
+def bar_chart(labels, values, ylabel, title, filename):
+    plt.figure(figsize=(10, 6))
+    plt.bar(labels, values)
+    plt.xticks(rotation=45, ha="right")
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.tight_layout()
+    plt.savefig(FIGURES / filename, dpi=200)
+    print(f"saved {FIGURES / filename}")
 
-    if local_path.exists():
-        frames.append(pd.read_csv(local_path))
 
-    if api_path.exists():
-        frames.append(pd.read_csv(api_path))
+def line_chart(x, y, xlabel, ylabel, title, filename):
+    plt.figure(figsize=(10, 6))
+    plt.plot(x, y, marker="o")
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.tight_layout()
+    plt.savefig(FIGURES / filename, dpi=200)
+    print(f"saved {FIGURES / filename}")
+
+
+def plot_local_and_api():
+    files = [
+        RESULTS / "local_benchmark_results.csv",
+        RESULTS / "api_benchmark_results.csv",
+    ]
+
+    frames = [pd.read_csv(f) for f in files if f.exists()]
 
     if not frames:
-        raise FileNotFoundError("No benchmark result files found. Run benchmark scripts first.")
+        print("no local/api benchmark results found")
+        return
 
-    return pd.concat(frames, ignore_index=True)
+    df = pd.concat(frames, ignore_index=True)
+    labels = df["mode"] + " b" + df["batch_size"].astype(str)
 
-def plot_latency(df):
-    labels = df["mode"] + "_batch_" + df["batch_size"].astype(str)
+    bar_chart(
+        labels,
+        df["p95_latency_ms"],
+        "p95 latency (ms)",
+        "p95 latency by inference path",
+        "p95_latency_comparison.png",
+    )
 
-    plt.figure(figsize=(10, 6))
-    plt.bar(labels, df["p95_latency_ms"])
-    plt.xticks(rotation=45, ha="right")
-    plt.ylabel("p95 Latency (ms)")
-    plt.title("ML Inference p95 Latency by Serving Mode")
-    plt.tight_layout()
+    bar_chart(
+        labels,
+        df["throughput_predictions_per_second"],
+        "predictions/sec",
+        "throughput by inference path",
+        "throughput_comparison.png",
+    )
 
-    output = FIGURES_DIR / "p95_latency_comparison.png"
-    plt.savefig(output, dpi=200)
-    print(f"Saved: {output}")
 
-def plot_throughput(df):
-    labels = df["mode"] + "_batch_" + df["batch_size"].astype(str)
+def plot_batch_api():
+    f = RESULTS / "batch_api_benchmark_results.csv"
 
-    plt.figure(figsize=(10, 6))
-    plt.bar(labels, df["throughput_predictions_per_second"])
-    plt.xticks(rotation=45, ha="right")
-    plt.ylabel("Predictions per Second")
-    plt.title("ML Inference Throughput by Serving Mode")
-    plt.tight_layout()
+    if not f.exists():
+        print("no batch api results found")
+        return
 
-    output = FIGURES_DIR / "throughput_comparison.png"
-    plt.savefig(output, dpi=200)
-    print(f"Saved: {output}")
+    df = pd.read_csv(f)
+
+    line_chart(
+        df["batch_size"],
+        df["p95_latency_ms"],
+        "batch size",
+        "p95 latency (ms)",
+        "FastAPI batch latency",
+        "batch_api_p95_latency.png",
+    )
+
+    line_chart(
+        df["batch_size"],
+        df["throughput_predictions_per_second"],
+        "batch size",
+        "predictions/sec",
+        "FastAPI batch throughput",
+        "batch_api_throughput.png",
+    )
+
+
+def plot_concurrency():
+    f = RESULTS / "concurrent_api_benchmark_results.csv"
+
+    if not f.exists():
+        print("no concurrency results found")
+        return
+
+    df = pd.read_csv(f)
+
+    line_chart(
+        df["concurrency"],
+        df["p95_latency_ms"],
+        "concurrent requests",
+        "p95 latency (ms)",
+        "FastAPI latency under concurrency",
+        "concurrent_api_p95_latency.png",
+    )
+
+    line_chart(
+        df["concurrency"],
+        df["throughput_requests_per_second"],
+        "concurrent requests",
+        "requests/sec",
+        "FastAPI throughput under concurrency",
+        "concurrent_api_throughput.png",
+    )
+
 
 def main():
-    df = load_results()
-    plot_latency(df)
-    plot_throughput(df)
+    plot_local_and_api()
+    plot_batch_api()
+    plot_concurrency()
+
 
 if __name__ == "__main__":
     main()
