@@ -1,0 +1,2 @@
+mode,batch_size,n_predictions,mean_latency_ms,p50_latency_ms,p95_latency_ms,p99_latency_ms,throughput_predictions_per_second
+fastapi_single,1,500,117.3225455959996,107.2392545000298,173.7575437000259,208.25550098007957,8.511412183573844

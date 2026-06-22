@@ -1,0 +1,50 @@
+{
+  "accuracy": 0.86,
+  "classification_report": {
+    "0": {
+      "precision": 0.8566775244299675,
+      "recall": 0.8580750407830342,
+      "f1-score": 0.8573757131214343,
+      "support": 613.0
+    },
+    "1": {
+      "precision": 0.8632075471698113,
+      "recall": 0.8618524332810047,
+      "f1-score": 0.8625294579732914,
+      "support": 637.0
+    },
+    "accuracy": 0.86,
+    "macro avg": {
+      "precision": 0.8599425357998893,
+      "recall": 0.8599637370320194,
+      "f1-score": 0.8599525855473629,
+      "support": 1250.0
+    },
+    "weighted avg": {
+      "precision": 0.8600052240181918,
+      "recall": 0.86,
+      "f1-score": 0.8600020614979407,
+      "support": 1250.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      526,
+      87
+    ],
+    [
+      88,
+      549
+    ]
+  ],
+  "features": [
+    "soil_moisture",
+    "temperature",
+    "rainfall",
+    "humidity",
+    "sunlight",
+    "ndvi"
+  ],
+  "model_type": "RandomForestClassifier",
+  "n_samples": 5000
+}
