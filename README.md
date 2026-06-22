@@ -1,16 +1,28 @@
 # ML Inference Benchmark Suite
 
-A reproducible benchmarking project for measuring machine learning inference latency, throughput, batching behavior, and deployment overhead across local Python inference and FastAPI model serving.
+A small benchmarking project for measuring inference latency, throughput, batching behavior, and API-serving overhead in machine learning systems.
 
-## Motivation
+## Overview
 
-Training a machine learning model is only one part of building a useful ML system. Once a model is deployed, the system also needs to be fast, reliable, reproducible, and easy to evaluate. This project explores the systems side of ML by benchmarking how different inference setups affect real-world performance.
+This project compares different ways of running inference for a trained machine learning model. The goal is to understand how deployment choices affect real system performance, not just model accuracy.
 
-The project compares local model inference against API-based serving and measures practical metrics such as p95 latency, p99 latency, throughput, and batching performance.
+The current benchmark uses a smart-irrigation classification model and compares:
 
-## System Overview
+1. Local Python inference
+2. FastAPI-based model serving
+3. Batch inference across multiple input sizes
 
-This project uses a synthetic smart-irrigation classification task based on environmental sensor-style features:
+The benchmark records latency and throughput metrics, then generates figures for easier comparison.
+
+## Why This Project
+
+In many ML projects, the focus is on training a model and reporting accuracy. In practice, deployment introduces a different set of problems: response time, throughput, reproducibility, serving overhead, and reliability under repeated requests.
+
+This project is meant to study those engineering tradeoffs in a simple, reproducible setting.
+
+## Model Task
+
+The model predicts whether a crop needs irrigation based on environmental features:
 
 * Soil moisture
 * Temperature
@@ -19,36 +31,29 @@ This project uses a synthetic smart-irrigation classification task based on envi
 * Sunlight
 * NDVI
 
-A Random Forest classifier predicts whether irrigation is needed. The model is then served through two inference paths:
+The classifier is trained on synthetic sensor-style data and saved as a reusable model artifact.
 
-1. Local Python inference
-2. FastAPI model-serving endpoint
+## Benchmarks
 
-## Metrics Measured
-
-The benchmark scripts measure:
+The project currently measures:
 
 * Mean latency
 * p50 latency
 * p95 latency
 * p99 latency
 * Throughput in predictions per second
-* Batch-size effects on inference speed
-* Deployment overhead from API-based serving
+* Batch-size effects
+* FastAPI serving overhead
 
-## Current Results
+The API benchmark was run over 500 single-prediction requests.
 
-The FastAPI benchmark was run over 500 single-prediction requests.
+Current FastAPI result:
 
-Current API benchmark result:
+* p95 latency: ~173.8 ms
+* p99 latency: ~208.3 ms
+* Throughput: ~8.5 predictions/second
 
-* p95 latency: approximately 173.8 ms
-* p99 latency: approximately 208.3 ms
-* throughput: approximately 8.5 predictions per second
-
-The local benchmark also compares single prediction against batch prediction across different batch sizes.
-
-## Project Structure
+## Repository Structure
 
 ```text
 ml-inference-benchmark-suite/
@@ -72,7 +77,7 @@ ml-inference-benchmark-suite/
   README.md
 ```
 
-## How to Run
+## Running the Project
 
 Install dependencies:
 
@@ -110,20 +115,22 @@ Generate plots:
 python src/plot_results.py
 ```
 
-## What I Learned
+## Results
 
-This project helped me understand that ML deployment is not only about model accuracy. A useful ML system also depends on inference speed, serving overhead, reproducibility, and clear performance measurement.
+Benchmark outputs are saved in the `results/` directory as CSV files. Generated figures are saved in the `figures/` directory.
 
-The biggest takeaway is that different serving paths introduce different tradeoffs. Local inference is simpler and often faster, while API serving introduces overhead but better represents real deployment conditions. Batching can improve throughput, but it also changes how latency should be interpreted.
+The current results show the expected tradeoff between local inference and API-based serving. Local inference avoids request overhead, while FastAPI serving better represents a real deployment setting where predictions are exposed through an endpoint.
 
-## Next Improvements
+Batch inference also changes the performance profile. Larger batches can improve throughput, but latency has to be interpreted differently because each request may represent multiple predictions.
 
-Planned improvements include:
+## Next Steps
 
-* Adding ONNX Runtime benchmarking
-* Comparing CPU vs GPU inference
-* Adding concurrent request testing
-* Measuring memory usage
-* Adding transformer model inference benchmarks
-* Testing batch inference through the API
-* Creating a dashboard for visualizing benchmark results
+Planned improvements:
+
+* Add concurrent request benchmarking
+* Add ONNX Runtime inference comparison
+* Compare CPU and GPU inference where available
+* Measure memory usage
+* Add transformer-model inference benchmarks
+* Add batch inference through the FastAPI endpoint
+* Build a simple dashboard for benchmark visualization
