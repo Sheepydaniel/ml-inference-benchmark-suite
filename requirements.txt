@@ -7,3 +7,4 @@ numpy
 matplotlib
 joblib
 requests
+httpx
