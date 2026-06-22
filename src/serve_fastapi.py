@@ -1,12 +1,13 @@
 from pathlib import Path
 from time import perf_counter
+
 import joblib
 import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-ROOT = Path(__file__).resolve().parent.parent
-MODEL_PATH = ROOT / "models" / "irrigation_model.joblib"
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_FILE = BASE_DIR / "models" / "irrigation_model.joblib"
 
 FEATURES = [
     "soil_moisture",
@@ -17,15 +18,12 @@ FEATURES = [
     "ndvi",
 ]
 
-app = FastAPI(
-    title="ML Inference Benchmarking API",
-    description="FastAPI model-serving endpoint for measuring ML inference latency and throughput.",
-    version="1.0.0",
-)
+app = FastAPI(title="Irrigation Model API", version="1.1")
 
-model = joblib.load(MODEL_PATH)
+model = joblib.load(MODEL_FILE)
 
-class IrrigationInput(BaseModel):
+
+class SensorReading(BaseModel):
     soil_moisture: float = Field(..., ge=0, le=100)
     temperature: float = Field(..., ge=-20, le=60)
     rainfall: float = Field(..., ge=0, le=200)
@@ -33,28 +31,71 @@ class IrrigationInput(BaseModel):
     sunlight: float = Field(..., ge=0, le=24)
     ndvi: float = Field(..., ge=0, le=1)
 
+
+class SensorBatch(BaseModel):
+    items: list[SensorReading]
+
+
+def as_row(reading: SensorReading) -> dict:
+    # Pydantic v2 uses model_dump; v1 uses dict.
+    return reading.model_dump() if hasattr(reading, "model_dump") else reading.dict()
+
+
 @app.get("/")
-def root():
+def home():
     return {
-        "message": "ML Inference Benchmarking API is running.",
-        "endpoint": "POST /predict",
+        "status": "running",
+        "single": "/predict",
+        "batch": "/predict_batch",
+        "docs": "/docs",
     }
 
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
 @app.post("/predict")
-def predict(input_data: IrrigationInput):
+def predict(reading: SensorReading):
     start = perf_counter()
 
-    row = pd.DataFrame([input_data.model_dump()])[FEATURES]
+    x = pd.DataFrame([as_row(reading)])[FEATURES]
+    pred = int(model.predict(x)[0])
+    prob = float(model.predict_proba(x)[0][1])
 
-    prediction = int(model.predict(row)[0])
-    probability = float(model.predict_proba(row)[0][1])
-
-    end = perf_counter()
-    latency_ms = (end - start) * 1000
+    ms = (perf_counter() - start) * 1000
 
     return {
-        "prediction": prediction,
-        "label": "Needs irrigation" if prediction == 1 else "No irrigation needed",
-        "probability_needs_water": round(probability, 4),
-        "latency_ms": round(latency_ms, 4),
+        "prediction": pred,
+        "label": "Needs irrigation" if pred else "No irrigation needed",
+        "probability": round(prob, 4),
+        "latency_ms": round(ms, 4),
+    }
+
+
+@app.post("/predict_batch")
+def predict_batch(batch: SensorBatch):
+    start = perf_counter()
+
+    x = pd.DataFrame([as_row(item) for item in batch.items])[FEATURES]
+    preds = model.predict(x)
+    probs = model.predict_proba(x)[:, 1]
+
+    ms = (perf_counter() - start) * 1000
+
+    rows = []
+    for pred, prob in zip(preds, probs):
+        pred = int(pred)
+        rows.append({
+            "prediction": pred,
+            "label": "Needs irrigation" if pred else "No irrigation needed",
+            "probability": round(float(prob), 4),
+        })
+
+    return {
+        "count": len(rows),
+        "latency_ms": round(ms, 4),
+        "predictions_per_second": round(len(rows) / (ms / 1000), 4),
+        "results": rows,
     }
