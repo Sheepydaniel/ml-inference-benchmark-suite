@@ -9,20 +9,21 @@ This project compares different ways of running inference for a trained machine 
 The current benchmark uses a smart-irrigation classification model and compares:
 
 1. Local Python inference
-2. FastAPI-based model serving
-3. Batch inference across multiple input sizes
+2. Single-request FastAPI inference
+3. Batch inference through FastAPI
+4. Concurrent API requests
 
-The benchmark records latency and throughput metrics, then generates figures for easier comparison.
+The benchmark records latency and throughput metrics, then generates plots for easier comparison.
 
 ## Why This Project
 
-In many ML projects, the focus is on training a model and reporting accuracy. In practice, deployment introduces a different set of problems: response time, throughput, reproducibility, serving overhead, and reliability under repeated requests.
+In many ML projects, the main focus is training a model and reporting accuracy. In practice, deployment introduces a different set of problems: response time, throughput, reproducibility, serving overhead, and reliability under repeated requests.
 
-This project is meant to study those engineering tradeoffs in a simple, reproducible setting.
+This project studies those engineering tradeoffs in a simple, reproducible setting.
 
 ## Model Task
 
-The model predicts whether a crop needs irrigation based on environmental features:
+The model predicts whether a crop needs irrigation based on environmental sensor-style features:
 
 * Soil moisture
 * Temperature
@@ -31,7 +32,7 @@ The model predicts whether a crop needs irrigation based on environmental featur
 * Sunlight
 * NDVI
 
-The classifier is trained on synthetic sensor-style data and saved as a reusable model artifact.
+The classifier is trained on synthetic smart-irrigation data and saved as a reusable model artifact.
 
 ## Benchmarks
 
@@ -44,35 +45,71 @@ The project currently measures:
 * Throughput in predictions per second
 * Batch-size effects
 * FastAPI serving overhead
+* Concurrent request behavior
 
-The API benchmark was run over 500 single-prediction requests.
+## Current Results
 
-Current FastAPI result:
+The benchmark outputs are saved in the `results/` directory as CSV files.
+
+Current result files:
+
+* `local_benchmark_results.csv`
+* `api_benchmark_results.csv`
+* `batch_api_benchmark_results.csv`
+* `concurrent_api_benchmark_results.csv`
+* `training_metrics.json`
+
+Generated plots are saved in the `figures/` directory.
+
+Current figure files:
+
+* `p95_latency_comparison.png`
+* `throughput_comparison.png`
+* `batch_api_p95_latency.png`
+* `batch_api_throughput.png`
+* `concurrent_api_p95_latency.png`
+* `concurrent_api_throughput.png`
+
+The initial FastAPI single-request benchmark was run over 500 prediction requests and measured approximately:
 
 * p95 latency: ~173.8 ms
 * p99 latency: ~208.3 ms
 * Throughput: ~8.5 predictions/second
+
+Batch and concurrency benchmarks were then added to compare how the system behaves under larger request patterns.
 
 ## Repository Structure
 
 ```text
 ml-inference-benchmark-suite/
   figures/
+    batch_api_p95_latency.png
+    batch_api_throughput.png
+    concurrent_api_p95_latency.png
+    concurrent_api_throughput.png
     p95_latency_comparison.png
     throughput_comparison.png
+
   models/
     irrigation_model.joblib
+
   results/
     api_benchmark_results.csv
+    batch_api_benchmark_results.csv
+    concurrent_api_benchmark_results.csv
     local_benchmark_results.csv
     synthetic_irrigation_data.csv
     training_metrics.json
+
   src/
-    train_model.py
-    serve_fastapi.py
-    benchmark_local.py
     benchmark_api.py
+    benchmark_batch_api.py
+    benchmark_concurrent_api.py
+    benchmark_local.py
     plot_results.py
+    serve_fastapi.py
+    train_model.py
+
   requirements.txt
   README.md
 ```
@@ -100,13 +137,25 @@ python src/benchmark_local.py
 Start the FastAPI server:
 
 ```bash
-uvicorn src.serve_fastapi:app --reload
+python -m uvicorn src.serve_fastapi:app --reload
 ```
 
-In a second terminal, run the API benchmark:
+In a second terminal, run the single-request API benchmark:
 
 ```bash
 python src/benchmark_api.py
+```
+
+Run the batch API benchmark:
+
+```bash
+python src/benchmark_batch_api.py
+```
+
+Run the concurrent request benchmark:
+
+```bash
+python src/benchmark_concurrent_api.py
 ```
 
 Generate plots:
@@ -115,22 +164,100 @@ Generate plots:
 python src/plot_results.py
 ```
 
-## Results
+## API Endpoints
 
-Benchmark outputs are saved in the `results/` directory as CSV files. Generated figures are saved in the `figures/` directory.
+The FastAPI server exposes three main endpoints:
 
-The current results show the expected tradeoff between local inference and API-based serving. Local inference avoids request overhead, while FastAPI serving better represents a real deployment setting where predictions are exposed through an endpoint.
+```text
+GET /health
+POST /predict
+POST /predict_batch
+```
 
-Batch inference also changes the performance profile. Larger batches can improve throughput, but latency has to be interpreted differently because each request may represent multiple predictions.
+Example single prediction request:
+
+```json
+{
+  "soil_moisture": 35,
+  "temperature": 29,
+  "rainfall": 10,
+  "humidity": 45,
+  "sunlight": 8,
+  "ndvi": 0.62
+}
+```
+
+Example batch request:
+
+```json
+{
+  "items": [
+    {
+      "soil_moisture": 35,
+      "temperature": 29,
+      "rainfall": 10,
+      "humidity": 45,
+      "sunlight": 8,
+      "ndvi": 0.62
+    },
+    {
+      "soil_moisture": 70,
+      "temperature": 22,
+      "rainfall": 40,
+      "humidity": 65,
+      "sunlight": 5,
+      "ndvi": 0.78
+    }
+  ]
+}
+```
+
+## What This Shows
+
+This project is not meant to maximize model accuracy. It is meant to study the systems side of ML inference.
+
+The main takeaways are:
+
+* Local inference avoids API overhead and is useful as a baseline.
+* API serving better represents a real deployment setting.
+* Batch inference can improve throughput, but latency has to be interpreted differently.
+* Concurrent requests reveal how the serving path behaves under repeated load.
+* p95 and p99 latency are more useful than average latency when thinking about user-facing reliability.
+
+## Completed Improvements
+
+* Added FastAPI model-serving endpoint
+* Added local inference benchmarking
+* Added single-request API benchmarking
+* Added batch inference endpoint
+* Added batch-size benchmarking
+* Added concurrent request benchmarking
+* Generated latency and throughput plots for local, API, batch, and concurrent inference paths
+* Saved benchmark results in reproducible CSV files
 
 ## Next Steps
 
 Planned improvements:
 
-* Add concurrent request benchmarking
 * Add ONNX Runtime inference comparison
 * Compare CPU and GPU inference where available
 * Measure memory usage
 * Add transformer-model inference benchmarks
-* Add batch inference through the FastAPI endpoint
+* Add repeated warm-start vs cold-start tests
 * Build a simple dashboard for benchmark visualization
+
+## Tech Stack
+
+* Python
+* FastAPI
+* scikit-learn
+* pandas
+* NumPy
+* matplotlib
+* requests
+* httpx
+* joblib
+
+## License
+
+This project is released under the MIT License.
